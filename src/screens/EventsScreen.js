@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, StatusBar, Dimensions } from 'react-native';
 import { useVideos } from '../context/VideoContext';
 import { COLORS } from '../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
 export default function EventsScreen() {
+  const navigation = useNavigation();
   const { getEvents } = useVideos();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,9 +24,23 @@ export default function EventsScreen() {
   };
 
   const renderEvent = ({ item }) => (
-    <TouchableOpacity style={styles.eventCard}>
-      <Image source={item.image} style={styles.eventImage} />
-      
+    <TouchableOpacity
+      style={[styles.eventCard, { width: SCREEN_WIDTH - 32, alignSelf: 'center' }]}
+      onPress={() => navigation.navigate('EventDetail', { event: item })}
+    >
+      <Image
+        source={
+          item.thumbnailImage
+            ? item.thumbnailImage
+            : item.bannerImage
+            ? item.bannerImage
+            : item.image
+            ? item.image
+            : require('../../assets/hero1.jpg')
+        }
+        style={[styles.eventImage, { width: SCREEN_WIDTH - 32, height: Math.round((SCREEN_WIDTH - 32) * 0.65) }]}
+      />
+
       {/* Status Badge */}
       {item.status && (
         <View style={[styles.statusBadge, item.status === 'live' && styles.liveBadge]}>
@@ -36,10 +53,12 @@ export default function EventsScreen() {
 
       <View style={styles.eventInfo}>
         <Text style={styles.eventTitle}>{item.title}</Text>
-        
+
         <View style={styles.eventMeta}>
           <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.6)" />
-          <Text style={styles.eventDate}>{item.date}</Text>
+          <Text style={styles.eventDate}>
+            {item.startTime ? new Date(item.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+          </Text>
         </View>
 
         {item.time && (

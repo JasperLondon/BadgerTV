@@ -1,33 +1,48 @@
-import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, FlatList, StyleSheet, Dimensions } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
+import EventCard from './EventCard';
 
 export default function UpcomingEventsSlider({ sectionTitle = 'Upcoming Events', data = [] }) {
+  const navigation = useNavigation();
+  const width = Dimensions.get('window').width;
+  const [active, setActive] = React.useState(0);
+
+  const renderEvent = ({ item }) => (
+    <View style={{ width: width - 40, paddingRight: 0 }}>
+      <EventCard
+        event={item}
+        onPress={() => navigation.navigate('EventDetail', { event: item })}
+      />
+    </View>
+  );
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.title}>{sectionTitle}</Text>
-
-      <ScrollView
+      <FlatList
+        data={data}
+        renderItem={renderEvent}
+        keyExtractor={item => item.id}
         horizontal
+        pagingEnabled
+        snapToInterval={width - 40}
+        decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 14, paddingRight: 20 }}
-      >
-        {data.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.card}>
-            <Image source={item.thumbnailUrl || item.image} style={styles.image} />
-
-            {item.badge && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.badge}</Text>
-              </View>
-            )}
-
-            <View style={styles.info}>
-              <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.date}>{item.date}</Text>
-            </View>
-          </TouchableOpacity>
+        onMomentumScrollEnd={e => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / (width - 40));
+          setActive(index);
+        }}
+        style={{ maxHeight: 130 }}
+        contentContainerStyle={{ paddingRight: 0 }}
+      />
+      {/* dots */}
+      <View style={styles.dots}>
+        {data.map((_, i) => (
+          <View key={i} style={[styles.dot, i === active && styles.dotActive]} />
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -43,43 +58,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 10
   },
-  card: {
-    width: 240,
-    borderRadius: 10,
-    backgroundColor: COLORS.SURFACE,
-    overflow: 'hidden',
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: 12 },
+  dot: {
+    width: 6, height: 6, borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.3)'
   },
-  image: {
-    width: '100%',
-    height: 130,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10
-  },
-  badge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: COLORS.ORANGE,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2
-  },
-  badgeText: {
-    color: COLORS.WHITE,
-    fontSize: 11,
-    fontWeight: '500'
-  },
-  info: {
-    padding: 8,
-  },
-  cardTitle: {
-    color: COLORS.WHITE,
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  date: {
-    color: COLORS.GRAY,
-    fontSize: 12,
-    marginTop: 2
-  }
+  dotActive: { backgroundColor: COLORS.WHITE, width: 14, borderRadius: 7 },
 });

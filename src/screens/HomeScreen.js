@@ -23,16 +23,21 @@ export default function HomeScreen() {
 
   // FlatList-based hero carousel
   const renderHero = ({ item }) => (
-    <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('ShowDetailScreen', { show: item })}>
-      <View style={styles.heroContainer}>
-        <Image source={item.bannerImage || item.backgroundUrl || item.image || require('../../assets/hero1.jpg')} style={styles.heroImage} />
-        <View style={styles.heroOverlay} />
-        <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>{item.title}</Text>
-          {item.description && <Text style={styles.heroDesc} numberOfLines={2}>{item.description}</Text>}
-        </View>
+    <View style={styles.heroContainer}>
+      <Image source={item.bannerImage || item.backgroundUrl || item.image || require('../../assets/hero1.jpg')} style={styles.heroImage} />
+      <View style={styles.heroOverlay} />
+      <View style={styles.heroContent}>
+        <Text style={styles.heroTitle}>{item.title}</Text>
+        {item.description && <Text style={styles.heroDesc} numberOfLines={2}>{item.description}</Text>}
+        <TouchableOpacity
+          style={styles.ctaButton}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('ShowDetailScreen', { show: item })}
+        >
+          <Text style={styles.ctaButtonText}>Watch Now</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -50,7 +55,7 @@ export default function HomeScreen() {
           const index = Math.round(e.nativeEvent.contentOffset.x / width);
           setActive(index);
         }}
-        style={{ maxHeight: 340 }}
+  style={{ maxHeight: 560 }}
       />
       {/* dots */}
       <View style={styles.dots}>
@@ -79,7 +84,7 @@ export default function HomeScreen() {
                   </View>
                   <Text style={{ color: COLORS.WHITE, fontSize: 14, fontWeight: '600' }}>{item.title}</Text>
                 </TouchableOpacity>
-              </View>
+            </View>
             );
           })}
         </View>
@@ -95,7 +100,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.SURFACE },
   heroContainer: {
     width: Dimensions.get('window').width,
-    height: 320,
+  height: 560, // Further increased height for an even taller hero card
     marginBottom: 18,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
@@ -103,6 +108,8 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     width: '100%', height: '100%', position: 'absolute', top: 0, left: 0,
+  resizeMode: 'cover',
+  // no explicit resizeMode, use default
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -130,6 +137,25 @@ const styles = StyleSheet.create({
     width: 6, height: 6, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.3)'
   },
-  dotActive: { backgroundColor: COLORS.WHITE, width: 14, borderRadius: 7 }
+  dotActive: { backgroundColor: COLORS.WHITE, width: 14, borderRadius: 7 },
+  ctaButton: {
+    marginTop: 16,
+    backgroundColor: COLORS.PRIMARY ? COLORS.PRIMARY : '#FF3B30',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 24,
+    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  ctaButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 1
+  }
 });
 

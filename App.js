@@ -14,6 +14,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import VideoPlayer from './src/screens/VideoPlayer';
 import ShowDetails from './src/screens/ShowDetails';
 import ShowDetailScreen from './src/screens/ShowDetailScreen';
+import EventDetailScreen from './src/screens/EventDetailScreen';
 import { COLORS } from './src/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -87,6 +88,14 @@ function AppNavigator() {
       <Stack.Screen 
         name="ShowDetailScreen" 
         component={ShowDetailScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="EventDetail" 
+        component={EventDetailScreen}
         options={{
           presentation: 'card',
           animation: 'slide_from_right'

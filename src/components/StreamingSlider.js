@@ -1,24 +1,37 @@
 // src/components/StreamingSlider.js
 
-import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 
 export default function StreamingSlider({ sectionTitle = 'Streaming 24/7', data = [], onCardPress }) {
   const navigation = useNavigation();
+  const [active, setActive] = React.useState(0);
+  const width = Dimensions.get('window').width;
+
+  const cardWidth = 180 + 14; // card + gap
+  const onScroll = (e) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / cardWidth);
+    setActive(index);
+  };
 
   return (
     <View style={styles.wrapper}>
       <Text style={styles.title}>{sectionTitle}</Text>
-
-      <ScrollView
+      <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 14, paddingRight: 20 }}
-      >
-        {data.map((item) => (
+        data={data}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ paddingLeft: 16, paddingRight: 16, gap: 14 }}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        snapToInterval={cardWidth}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
           <TouchableOpacity
-            key={item.id}
             style={styles.card}
             onPress={() => {
               if (onCardPress) onCardPress(item);
@@ -26,22 +39,25 @@ export default function StreamingSlider({ sectionTitle = 'Streaming 24/7', data 
             }}
           >
             <Image source={item.posterImage || item.posterUrl || item.thumbnailUrl || item.image} style={styles.image} />
-
             {/* badge */}
             {item.badge && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{item.badge}</Text>
               </View>
             )}
-
-            <Text style={styles.cardTitle}>{item.title}</Text>
             {item.description && (
               <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
             )}
           </TouchableOpacity>
+        )}
+      />
+      {/* dots */}
+      <View style={styles.dots}>
+        {data.map((_, i) => (
+          <View key={i} style={[styles.dot, i === active && styles.dotActive]} />
         ))}
-      </ScrollView>
-    </View>
+      </View>
+	</View>
   );
 }
 
@@ -78,7 +94,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     marginLeft: 6,
-    marginBottom: 4,
+    marginBottom: 4
   },
   badge: {
     position: 'absolute',
@@ -93,6 +109,24 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: '600'
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 12
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: 4
+  },
+  dotActive: {
+    backgroundColor: COLORS.WHITE,
+    width: 14,
+    borderRadius: 7,
+    marginHorizontal: 4
   }
 });
 
