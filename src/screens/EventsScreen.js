@@ -1,0 +1,173 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, StatusBar } from 'react-native';
+import { useVideos } from '../context/VideoContext';
+import { COLORS } from '../constants/colors';
+import { Ionicons } from '@expo/vector-icons';
+
+export default function EventsScreen() {
+  const { getEvents } = useVideos();
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  const loadEvents = async () => {
+    setLoading(true);
+    const data = await getEvents();
+    setEvents(data);
+    setLoading(false);
+  };
+
+  const renderEvent = ({ item }) => (
+    <TouchableOpacity style={styles.eventCard}>
+      <Image source={item.image} style={styles.eventImage} />
+      
+      {/* Status Badge */}
+      {item.status && (
+        <View style={[styles.statusBadge, item.status === 'live' && styles.liveBadge]}>
+          {item.status === 'live' && <View style={styles.liveDot} />}
+          <Text style={styles.statusText}>
+            {item.status === 'live' ? 'LIVE NOW' : item.status.toUpperCase()}
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.eventInfo}>
+        <Text style={styles.eventTitle}>{item.title}</Text>
+        
+        <View style={styles.eventMeta}>
+          <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.6)" />
+          <Text style={styles.eventDate}>{item.date}</Text>
+        </View>
+
+        {item.time && (
+          <View style={styles.eventMeta}>
+            <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.6)" />
+            <Text style={styles.eventTime}>{item.time}</Text>
+          </View>
+        )}
+
+        {item.location && (
+          <View style={styles.eventMeta}>
+            <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.6)" />
+            <Text style={styles.eventLocation}>{item.location}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Upcoming Events</Text>
+        <Text style={styles.headerSubtitle}>Live streams & competitions</Text>
+      </View>
+
+      <FlatList
+        data={events}
+        renderItem={renderEvent}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.SURFACE,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: COLORS.SURFACE,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: COLORS.WHITE,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  listContainer: {
+    padding: 16,
+  },
+  eventCard: {
+    marginBottom: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+  },
+  eventImage: {
+    width: '100%',
+    height: 200,
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: COLORS.ORANGE,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveBadge: {
+    backgroundColor: '#ff4444',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.WHITE,
+    marginRight: 6,
+  },
+  statusText: {
+    color: COLORS.WHITE,
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  eventInfo: {
+    padding: 16,
+  },
+  eventTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.WHITE,
+    marginBottom: 12,
+  },
+  eventMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  eventDate: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    marginLeft: 6,
+  },
+  eventTime: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    marginLeft: 6,
+  },
+  eventLocation: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    marginLeft: 6,
+  },
+});
