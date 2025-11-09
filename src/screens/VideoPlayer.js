@@ -1,4 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { isSaved, setSavedItem } from '../helpers/library';
+  // Save to Library (bookmark) state
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (video && video.id) {
+      isSaved(video.id).then(setSaved);
+    }
+  }, [video && video.id]);
+  // Toggle bookmark
+  const toggleSave = async () => {
+    if (!video || !video.id) return;
+    await setSavedItem(video.id, !saved);
+    setSaved(!saved);
+  };
+import React, { useState, useEffect, useRef, useContext } from 'react';
+import { usePiP } from '../context/PiPContext';
 import {
   View,
   Text,
@@ -10,6 +25,7 @@ import {
   Alert,
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-video';
+import { useQualitySelector, QualityButton } from '../components/QualitySelector';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { getVideoUrl, updateWatchProgress, getVideoById } from '../services/api';
@@ -17,7 +33,9 @@ import { getVideoUrl, updateWatchProgress, getVideoById } from '../services/api'
 const { width, height } = Dimensions.get('window');
 
 const VideoPlayer = ({ route, navigation }) => {
-  const { videoId, videoUrl, title, s3Key } = route.params || {};
+  const { videoId, videoUrl, title, s3Key, video, startAt } = route.params || {};
+  // video: full stream object if passed (for PiP)
+  const { showPiP, hidePiP } = usePiP();
   
   const videoRef = useRef(null);
   const [status, setStatus] = useState({});
@@ -26,6 +44,8 @@ const VideoPlayer = ({ route, navigation }) => {
   const [videoInfo, setVideoInfo] = useState(null);
   const [showControls, setShowControls] = useState(true);
   const [error, setError] = useState(null);
+  // Quality selector state
+  const { quality, showQualitySheet } = useQualitySelector('Auto');
   
   const hideControlsTimeout = useRef(null);
 
@@ -96,7 +116,12 @@ const VideoPlayer = ({ route, navigation }) => {
     resetHideControlsTimer();
   };
 
+  // When closing, offer to show PiP
   const handleClose = () => {
+    // Only show PiP if video/stream object is available and not already in PiP
+    if (video) {
+      showPiP(video);
+    }
     navigation.goBack();
   };
 
@@ -169,12 +194,13 @@ const VideoPlayer = ({ route, navigation }) => {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      
+      {/* Main video area */}
       <TouchableOpacity
         style={styles.videoContainer}
         activeOpacity={1}
         onPress={resetHideControlsTimer}
       >
+        {/* Video component: wire quality to player props (simulate variant selection) */}
         <Video
           ref={videoRef}
           source={{ uri: playbackUrl }}
@@ -187,6 +213,8 @@ const VideoPlayer = ({ route, navigation }) => {
             console.error('Video playback error:', err);
             setError('Playback error occurred');
           }}
+          // Simulate variant selection: pass quality as a prop (no backend)
+          quality={quality}
         />
 
         {/* Controls Overlay */}
@@ -194,6 +222,7 @@ const VideoPlayer = ({ route, navigation }) => {
           <View style={styles.controlsOverlay}>
             {/* Top Bar */}
             <View style={styles.topBar}>
+              {/* Close: triggers PiP if video object exists */}
               <TouchableOpacity onPress={handleClose} style={styles.closeIconButton}>
                 <Ionicons name="close" size={32} color={COLORS.WHITE} />
               </TouchableOpacity>
@@ -202,14 +231,24 @@ const VideoPlayer = ({ route, navigation }) => {
                   {title || videoInfo?.title}
                 </Text>
               )}
+              {/* Quality selector button */}
+              <QualityButton onPress={showQualitySheet} quality={quality} />
+              {/* Save to Library (bookmark) icon */}
+              {video && video.id && (
+                <TouchableOpacity
+                  onPress={toggleSave}
+                  style={styles.bookmarkBtn}
+                  accessibilityLabel={saved ? 'Remove from Library' : 'Save to Library'}
+                >
+                  <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.ORANGE} />
+                </TouchableOpacity>
+              )}
             </View>
-
             {/* Center Controls */}
             <View style={styles.centerControls}>
               <TouchableOpacity onPress={() => handleSeek('backward')} style={styles.controlButton}>
                 <Ionicons name="play-back" size={48} color={COLORS.WHITE} />
               </TouchableOpacity>
-              
               <TouchableOpacity onPress={handlePlayPause} style={styles.controlButton}>
                 <Ionicons 
                   name={status.isPlaying ? 'pause' : 'play'} 
@@ -217,12 +256,10 @@ const VideoPlayer = ({ route, navigation }) => {
                   color={COLORS.WHITE} 
                 />
               </TouchableOpacity>
-              
               <TouchableOpacity onPress={() => handleSeek('forward')} style={styles.controlButton}>
                 <Ionicons name="play-forward" size={48} color={COLORS.WHITE} />
               </TouchableOpacity>
             </View>
-
             {/* Bottom Bar - Progress */}
             <View style={styles.bottomBar}>
               <View style={styles.progressContainer}>
@@ -248,6 +285,7 @@ const VideoPlayer = ({ route, navigation }) => {
             </View>
           </View>
         )}
+// Style for Save to Library (bookmark) button
       </TouchableOpacity>
     </View>
   );
@@ -257,6 +295,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.BLACK,
+  },
+  bookmarkBtn: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: 16,
+    padding: 6,
   },
   loadingContainer: {
     flex: 1,

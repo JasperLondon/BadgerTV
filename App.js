@@ -5,11 +5,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar, Platform, ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { VideoProvider } from './src/context/VideoContext';
+import { PiPProvider } from './src/context/PiPContext';
+import PiPPlayer from './src/components/PiPPlayer';
 import HomeScreen from './src/screens/HomeScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import LiveTVScreen from './src/screens/LiveTVScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import LibraryScreen from './src/screens/LibraryScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import VideoPlayer from './src/screens/VideoPlayer';
 import ShowDetails from './src/screens/ShowDetails';
@@ -48,6 +51,8 @@ function RootTabs() {
         options={{ tabBarIcon: p => <TabBarIcon name="list" {...p} /> }} />
       <Tabs.Screen name="Search" component={SearchScreen}
         options={{ tabBarIcon: p => <TabBarIcon name="search" {...p} /> }} />
+      <Tabs.Screen name="Library" component={LibraryScreen}
+        options={{ tabBarIcon: p => <TabBarIcon name="bookmark" {...p} /> }} />
       <Tabs.Screen name="Profile" component={ProfileScreen}
         options={{ tabBarIcon: p => <TabBarIcon name="person" {...p} /> }} />
     </Tabs.Navigator>
@@ -114,13 +119,18 @@ function AppNavigator() {
 }
 
 export default function App() {
+  // Wrap the app in PiPProvider and render PiPPlayer at the root
   return (
     <AuthProvider>
       <VideoProvider>
-        <NavigationContainer>
-          <StatusBar barStyle="light-content" />
-          <AppNavigator />
-        </NavigationContainer>
+        <PiPProvider>
+          <NavigationContainer>
+            <StatusBar barStyle="light-content" />
+            <AppNavigator />
+            {/* Global PiP mini-player, always rendered at root */}
+            <PiPPlayer />
+          </NavigationContainer>
+        </PiPProvider>
       </VideoProvider>
     </AuthProvider>
   );
