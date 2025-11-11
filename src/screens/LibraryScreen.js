@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getSavedItems } from '../helpers/library';
+import { useEffect, useState } from 'react';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../constants/colors';
+import { getSavedItems } from '../helpers/library';
 
 // Placeholder Library screen: lists saved events from local storage
 export default function LibraryScreen() {

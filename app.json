@@ -8,13 +8,18 @@
     "scheme": "badgertv",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kigkeckler.badgertv",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/splash-logo.png",
         "backgroundColor": "#000000"
-      }
+      },
+      "package": "com.kigkeckler.badgertv"
     },
     "web": {
       "favicon": "./assets/splash-logo.png"
@@ -31,8 +36,11 @@
     ],
     "assetBundlePatterns": [
       "**/*"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3a950301-7a33-47c6-8ca0-f65d86354a9c"
+      }
+    }
   }
 }
-
-

@@ -1,15 +1,128 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, SectionList, Image, TouchableOpacity, StatusBar, Button, Platform, ScrollView, ActionSheetIOS, RefreshControl } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import mergeStreams from '../helpers/mergeStreams';
-import { useVideos } from '../context/VideoContext';
-import { COLORS } from '../constants/colors';
+  // Analytics: handle reaction events
+  const handleReaction = (emoji, streamId) => {
+    Analytics.logEvent('reaction_sent', {
+      stream_id: streamId,
+      emoji,
+    });
+  };
 import { Ionicons } from '@expo/vector-icons';
+import * as Analytics from 'expo-firebase-analytics';
+import { useFocusEffect } from '@react-navigation/native';
+import { createClient } from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
-import { getCountdownParts } from '../helpers/time';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import React from 'react';
+import { ActionSheetIOS, Image, Platform, RefreshControl, ScrollView, SectionList, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { COLORS } from '../constants/colors';
+import { useVideos } from '../context/VideoContext';
 import { isSaved, setSavedItem } from '../helpers/library';
+import mergeStreams from '../helpers/mergeStreams';
+import { getCountdownParts } from '../helpers/time';
+// --- Supabase config ---
+const SUPABASE_URL = 'https://YOUR_SUPABASE_URL.supabase.co'; // TODO: Replace with your Supabase URL
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // TODO: Replace with your Supabase anon key
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-export default function LiveTVScreen({ navigation }) {
+export default function LiveTVScreen({ navigation, route }) {
+  // --- Analytics: track screen view on mount ---
+  useEffect(() => {
+    Analytics.logEvent('screen_view', { screen: 'LiveTVScreen' });
+  }, []);
+  // --- Live Chat State (per stream) ---
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [activeChatStreamId, setActiveChatStreamId] = useState(null);
+  const chatListRef = useRef();
+
+  // When a live stream is selected, set it as the active chat stream
+  const handleLiveStreamPress = (stream) => {
+    setActiveChatStreamId(stream.id);
+    Analytics.logEvent('stream_card_click', {
+      stream_id: stream.id,
+      title: stream.title,
+    });
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Watch Live', 'Watch from Beginning', 'Open Chat'],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            navigation.navigate('VideoPlayer', { video: stream, startAt: 'live' });
+          } else if (buttonIndex === 2) {
+            navigation.navigate('VideoPlayer', { video: stream, startAt: 'beginning' });
+          }
+        }
+      );
+    } else {
+      navigation.navigate('VideoPlayer', { video: stream, startAt: 'live' });
+    }
+  };
+
+  // Deep linking: select stream if streamId param is present
+  useEffect(() => {
+    const streamId = route?.params?.streamId;
+    if (streamId && liveNow.length > 0) {
+      // If the streamId exists in liveNow, set it as active
+      const found = liveNow.find(s => s.id === streamId);
+      if (found && activeChatStreamId !== streamId) {
+        setActiveChatStreamId(streamId);
+      }
+    } else if (!activeChatStreamId && liveNow.length > 0) {
+      // Default to first live stream if no streamId
+      setActiveChatStreamId(liveNow[0].id);
+    }
+    // If no live streams, clear activeChatStreamId
+    if (activeChatStreamId && liveNow.length === 0) {
+      setActiveChatStreamId(null);
+    }
+  }, [liveNow, activeChatStreamId, route?.params]);
+
+  // Fetch chat messages for the active stream
+  useEffect(() => {
+    if (!activeChatStreamId) return;
+    let mounted = true;
+    const channel = `livetv-${activeChatStreamId}`;
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('channel', channel)
+        .order('created_at', { ascending: true });
+      if (!error && mounted) setChatMessages(data || []);
+    };
+    fetchMessages();
+    // Subscribe to new messages for this stream
+    const subscription = supabase
+      .channel(`public:chat_messages:${channel}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `channel=eq.${channel}` }, payload => {
+        setChatMessages(prev => [...prev, payload.new]);
+      })
+      .subscribe();
+    return () => {
+      mounted = false;
+      supabase.removeChannel(subscription);
+    };
+  }, [activeChatStreamId]);
+
+  // Send chat message for the active stream
+  const sendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || !activeChatStreamId) return;
+    setChatInput('');
+    await supabase.from('chat_messages').insert([
+      {
+        channel: `livetv-${activeChatStreamId}`,
+        content: text,
+        username: 'Guest', // TODO: Replace with real user if available
+      },
+    ]);
+    Analytics.logEvent('chat_message_sent', {
+      stream_id: activeChatStreamId,
+      content_length: text.length,
+    });
+  };
   const { getLiveStreams } = useVideos();
   const [streams, setStreams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,13 +191,41 @@ export default function LiveTVScreen({ navigation }) {
     if (manual) setLoading(false);
   };
 
+
   // Use static placeholder categories for now
   const categories = ['All', 'Sports', 'Festivals', 'Podcasts', 'Competitions', 'Music'];
 
+  // Sort options
+  const SORT_OPTIONS = [
+    { label: 'Most Popular', value: 'popular' },
+    { label: 'Newest', value: 'newest' },
+    { label: 'Starting Soon', value: 'soon' },
+  ];
+  const [sortOption, setSortOption] = useState('popular');
+
+
   // Filter streams by selected category
-  const filteredStreams = selectedCategory === 'All'
+  let filteredStreams = selectedCategory === 'All'
     ? streams
     : streams.filter(s => s.category === selectedCategory);
+
+  // Sort streams based on sortOption
+  filteredStreams = [...filteredStreams];
+  if (sortOption === 'popular') {
+    filteredStreams.sort((a, b) => (b.viewers || 0) - (a.viewers || 0));
+  } else if (sortOption === 'newest') {
+    filteredStreams.sort((a, b) => {
+      const aTime = new Date(a.startTime || a.createdAt || 0).getTime();
+      const bTime = new Date(b.startTime || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+  } else if (sortOption === 'soon') {
+    filteredStreams.sort((a, b) => {
+      const aTime = new Date(a.startTime || Infinity).getTime();
+      const bTime = new Date(b.startTime || Infinity).getTime();
+      return aTime - bTime;
+    });
+  }
 
   // Split filtered streams into Live Now and Upcoming
   const liveNow = filteredStreams.filter(
@@ -112,28 +253,7 @@ export default function LiveTVScreen({ navigation }) {
     },
   ];
 
-  // Show ActionSheet for live streams: Watch Live or Watch from Beginning
-  const handleLiveStreamPress = (stream) => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Watch Live', 'Watch from Beginning'],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            navigation.navigate('VideoPlayer', { video: stream, startAt: 'live' });
-          } else if (buttonIndex === 2) {
-            navigation.navigate('VideoPlayer', { video: stream, startAt: 'beginning' });
-          }
-        }
-      );
-    } else {
-      // Simple fallback for Android: show both options
-      // (Replace with a better ActionSheet if desired)
-      navigation.navigate('VideoPlayer', { video: stream, startAt: 'live' });
-    }
-  };
+  // ...existing code...
 
   // Schedules a local notification 10 minutes before startTime
   const handleRemindMe = async (item) => {
@@ -162,12 +282,16 @@ export default function LiveTVScreen({ navigation }) {
       },
       trigger,
     });
+    Analytics.logEvent('remind_me_click', {
+      stream_id: item.id,
+      title: item.title,
+      start_time: item.startTime,
+    });
     alert('Reminder set! You will be notified 10 minutes before this event.');
   };
 
-  // Renders a live stream card with Save to Library (bookmark), semantic badges, and trending indicator
-  const renderLiveStream = ({ item }) => {
-    // Calculate live progress (0..1) if startTime and endTime exist
+  // Memoized LiveStreamCard for performance
+  const LiveStreamCard = React.memo(({ item, now, saved, onPress, onToggleSave }) => {
     let progress = null;
     if (item.startTime && item.endTime) {
       const start = new Date(item.startTime).getTime();
@@ -176,29 +300,24 @@ export default function LiveTVScreen({ navigation }) {
       const current = Math.max(0, Math.min(now.getTime() - start, total));
       progress = total > 0 ? current / total : null;
     }
-    const saved = !!savedMap[item.id];
-    // Semantic badges: Finals, Exclusive, Breaking, etc.
     const tagBadges = Array.isArray(item.tags)
       ? item.tags.filter(tag => ['Finals', 'Exclusive', 'Breaking'].includes(tag))
       : [];
-    // Trending indicator: e.g., '+5k in last 10m'
     const viewerDelta = item.viewerDelta;
     return (
       <TouchableOpacity
         style={styles.streamCard}
-        onPress={() => handleLiveStreamPress(item)}
+        onPress={() => onPress(item)}
         activeOpacity={0.9}
       >
         <Image
           source={item.thumbnailUrl || item.image}
           style={styles.streamImage}
         />
-        {/* Live Badge */}
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
-        {/* Semantic badges (Finals, Exclusive, Breaking, etc.) */}
         {tagBadges.length > 0 && (
           <View style={styles.badgeRow}>
             {tagBadges.map((tag, idx) => (
@@ -208,29 +327,25 @@ export default function LiveTVScreen({ navigation }) {
             ))}
           </View>
         )}
-        {/* Bookmark icon (Save to Library) */}
         <TouchableOpacity
           style={styles.bookmarkBtn}
-          onPress={e => { e.stopPropagation(); toggleSave(item.id); }}
+          onPress={e => { e.stopPropagation(); onToggleSave(item.id); }}
           accessibilityLabel={saved ? 'Remove from Library' : 'Save to Library'}
         >
           <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.ORANGE} />
         </TouchableOpacity>
-        {/* Viewer Count (if available) */}
         {item.viewers ? (
           <View style={styles.viewersBadge}>
             <Ionicons name="eye" size={12} color={COLORS.WHITE} />
             <Text style={styles.viewersText}>{item.viewers}</Text>
           </View>
         ) : null}
-        {/* Trending indicator (viewerDelta) */}
         {viewerDelta ? (
           <View style={styles.trendingBadge}>
             <Ionicons name="trending-up" size={13} color={COLORS.ORANGE} style={{ marginRight: 3 }} />
             <Text style={styles.trendingText}>{viewerDelta}</Text>
           </View>
         ) : null}
-        {/* Live progress bar */}
         {progress !== null && (
           <View style={styles.progressBarContainer}>
             <View style={[styles.progressBar, { width: `${Math.round(progress * 100)}%` }]} />
@@ -249,7 +364,20 @@ export default function LiveTVScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  };
+  });
+
+  const renderLiveStream = useCallback(
+    ({ item }) => (
+      <LiveStreamCard
+        item={item}
+        now={now}
+        saved={!!savedMap[item.id]}
+        onPress={handleLiveStreamPress}
+        onToggleSave={toggleSave}
+      />
+    ),
+    [now, savedMap, handleLiveStreamPress, toggleSave]
+  );
   // Add style for bookmark button
   // ...existing code...
   // Add to styles at the end:
@@ -314,6 +442,27 @@ export default function LiveTVScreen({ navigation }) {
           PiP available
         </Text>
       </View>
+      {/* Sort selector */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.chipScroll, { marginBottom: 0 }]}
+        style={{ marginBottom: 0 }}
+        accessibilityRole="radiogroup"
+      >
+        {SORT_OPTIONS.map(opt => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.chip, sortOption === opt.value && styles.chipActive]}
+            onPress={() => setSortOption(opt.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: sortOption === opt.value }}
+            accessibilityLabel={opt.label + (sortOption === opt.value ? ', selected' : '')}
+          >
+            <Text style={[styles.chipText, sortOption === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       {/* Category filter chips */}
       <ScrollView
         horizontal
@@ -338,7 +487,10 @@ export default function LiveTVScreen({ navigation }) {
       {/* Unified SectionList for Live Now and Upcoming */}
       <SectionList
         sections={sections}
-        keyExtractor={(item) => item.id}
+        keyExtractor={useCallback(item => item.id, [])}
+        getItemLayout={useCallback((data, index) => (
+          { length: 240, offset: 240 * index, index }
+        ), [])}
         renderItem={({ item, section }) =>
           section.title === 'Live Now'
             ? renderLiveStream({ item })
@@ -355,18 +507,35 @@ export default function LiveTVScreen({ navigation }) {
         )}
         ListEmptyComponent={loading ? null : (
           <View style={styles.emptyState}>
-            <Ionicons name="tv-outline" size={64} color="rgba(255,255,255,0.3)" />
-            <Text style={styles.emptyText}>No live or upcoming streams</Text>
+            <Ionicons name="tv-off-outline" size={72} color="rgba(255,255,255,0.18)" style={{ marginBottom: 12 }} />
+            <Text style={styles.emptyText}>Nothing to watch right now</Text>
+            <Text style={styles.emptySubtext}>Try adjusting your filters or check back later for new live events and streams.</Text>
+            <TouchableOpacity
+              style={styles.emptyActionBtn}
+              onPress={onRefresh}
+              accessibilityLabel="Refresh streams"
+            >
+              <Ionicons name="refresh" size={18} color={COLORS.ORANGE} style={{ marginRight: 6 }} />
+              <Text style={styles.emptyActionText}>Refresh</Text>
+            </TouchableOpacity>
           </View>
         )}
         renderSectionFooter={({ section }) => (
           !loading && section.data.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name={section.emptyIcon} size={64} color="rgba(255,255,255,0.3)" />
-              <Text style={styles.emptyText}>{section.emptyText}</Text>
+              <Ionicons name={section.emptyIcon || 'tv-outline'} size={56} color="rgba(255,255,255,0.18)" style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyText}>{section.emptyText || 'No streams found'}</Text>
               {section.emptySubtext ? (
                 <Text style={styles.emptySubtext}>{section.emptySubtext}</Text>
               ) : null}
+              <TouchableOpacity
+                style={styles.emptyActionBtn}
+                onPress={onRefresh}
+                accessibilityLabel="Refresh section"
+              >
+                <Ionicons name="refresh" size={16} color={COLORS.ORANGE} style={{ marginRight: 5 }} />
+                <Text style={styles.emptyActionText}>Try Again</Text>
+              </TouchableOpacity>
             </View>
           ) : null
         )}
@@ -377,6 +546,44 @@ export default function LiveTVScreen({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.ORANGE} />
         }
       />
+      {/* Live Chat / Reactions (per stream) */}
+      {activeChatStreamId && (
+        <View style={styles.chatContainer}>
+          <View style={styles.reactionsRow}>
+            <TouchableOpacity onPress={() => handleReaction('👍', activeChatStreamId)}><Text style={styles.reactionIcon} accessible accessibilityLabel="Like">👍</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => handleReaction('❤️', activeChatStreamId)}><Text style={styles.reactionIcon} accessible accessibilityLabel="Love">❤️</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => handleReaction('🔥', activeChatStreamId)}><Text style={styles.reactionIcon} accessible accessibilityLabel="Fire">🔥</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => handleReaction('👏', activeChatStreamId)}><Text style={styles.reactionIcon} accessible accessibilityLabel="Clap">👏</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => handleReaction('😂', activeChatStreamId)}><Text style={styles.reactionIcon} accessible accessibilityLabel="Laugh">😂</Text></TouchableOpacity>
+          </View>
+          <View style={styles.chatList} ref={chatListRef}>
+            {chatMessages.length === 0 ? (
+              <Text style={styles.chatEmptyText}>No messages yet. Start the conversation!</Text>
+            ) : (
+              chatMessages.map((msg, idx) => (
+                <View key={msg.id || idx} style={styles.chatMsgRow}>
+                  <Text style={styles.chatMsgUser}>{msg.username || 'Guest'}:</Text>
+                  <Text style={styles.chatMsgText}>{msg.content}</Text>
+                </View>
+              ))
+            )}
+          </View>
+          <View style={styles.chatInputRow}>
+            <TextInput
+              style={styles.chatInput}
+              value={chatInput}
+              onChangeText={setChatInput}
+              placeholder="Type a message..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              onSubmitEditing={sendChatMessage}
+              returnKeyType="send"
+            />
+            <TouchableOpacity onPress={sendChatMessage} style={styles.sendBtn} accessibilityLabel="Send message">
+              <Ionicons name="send" size={20} color={COLORS.ORANGE} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -568,17 +775,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
+    marginTop: 24,
+    marginBottom: 24,
+    backgroundColor: 'transparent',
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: COLORS.WHITE,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 10,
+    marginBottom: 6,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 15,
     color: 'rgba(255,255,255,0.5)',
+    marginBottom: 12,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  emptyActionText: {
+    color: COLORS.ORANGE,
+    fontWeight: 'bold',
+    fontSize: 15,
+    marginLeft: 2,
   },
   // Save to Library (bookmark) button
   bookmarkBtn: {
@@ -589,5 +820,82 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.25)',
     borderRadius: 16,
     padding: 6,
+  },
+  // Live chat/reactions styles
+  chatContainer: {
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  chatList: {
+    maxHeight: 160,
+    minHeight: 60,
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  chatMsgRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 2,
+  },
+  chatMsgUser: {
+    color: COLORS.ORANGE,
+    fontWeight: 'bold',
+    marginRight: 6,
+    fontSize: 14,
+  },
+  chatMsgText: {
+    color: COLORS.WHITE,
+    fontSize: 14,
+    flexShrink: 1,
+  },
+  chatEmptyText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 8,
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    color: COLORS.WHITE,
+    fontSize: 15,
+    marginRight: 8,
+  },
+  sendBtn: {
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderRadius: 16,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reactionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 16,
+  },
+  reactionIcon: {
+    fontSize: 22,
+    marginHorizontal: 4,
+    textAlign: 'center',
+  },
+  chatInputRow: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+  },
+  chatInputText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 15,
+    fontStyle: 'italic',
   },
 });

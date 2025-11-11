@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useCallback, useContext, useState } from 'react';
 
 // PiPContext holds the current PiP stream and visibility
 const PiPContext = createContext();

@@ -1,7 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActionSheetIOS, Platform, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 // QualitySelector: Overlay button and sheet for quality selection
 export function useQualitySelector(defaultQuality = 'Auto') {

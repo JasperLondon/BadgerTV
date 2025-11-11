@@ -1,4 +1,40 @@
+import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-video';
+import { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { QualityButton, useQualitySelector } from '../components/QualitySelector';
+import { COLORS } from '../constants/colors';
+import { usePiP } from '../context/PiPContext';
 import { isSaved, setSavedItem } from '../helpers/library';
+import { getVideoById, getVideoUrl, updateWatchProgress } from '../services/api';
+
+const { width, height } = Dimensions.get('window');
+
+
+const VideoPlayer = ({ route, navigation }) => {
+  const { videoId, videoUrl, title, s3Key, video, startAt } = route.params || {};
+  // video: full stream object if passed (for PiP)
+  const { showPiP, hidePiP } = usePiP();
+
+  const videoRef = useRef(null);
+  const [status, setStatus] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [playbackUrl, setPlaybackUrl] = useState(videoUrl || null);
+  const [videoInfo, setVideoInfo] = useState(null);
+  const [showControls, setShowControls] = useState(true);
+  const [error, setError] = useState(null);
+  // Quality selector state
+  const { quality, showQualitySheet } = useQualitySelector('Auto');
+
   // Save to Library (bookmark) state
   const [saved, setSaved] = useState(false);
   useEffect(() => {
@@ -12,46 +48,12 @@ import { isSaved, setSavedItem } from '../helpers/library';
     await setSavedItem(video.id, !saved);
     setSaved(!saved);
   };
-import React, { useState, useEffect, useRef, useContext } from 'react';
-import { usePiP } from '../context/PiPContext';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Dimensions,
-  StatusBar,
-  Alert,
-} from 'react-native';
-import { Video, ResizeMode } from 'expo-video';
-import { useQualitySelector, QualityButton } from '../components/QualitySelector';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../constants/colors';
-import { getVideoUrl, updateWatchProgress, getVideoById } from '../services/api';
 
-const { width, height } = Dimensions.get('window');
-
-const VideoPlayer = ({ route, navigation }) => {
-  const { videoId, videoUrl, title, s3Key, video, startAt } = route.params || {};
-  // video: full stream object if passed (for PiP)
-  const { showPiP, hidePiP } = usePiP();
-  
-  const videoRef = useRef(null);
-  const [status, setStatus] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [playbackUrl, setPlaybackUrl] = useState(videoUrl || null);
-  const [videoInfo, setVideoInfo] = useState(null);
-  const [showControls, setShowControls] = useState(true);
-  const [error, setError] = useState(null);
-  // Quality selector state
-  const { quality, showQualitySheet } = useQualitySelector('Auto');
-  
   const hideControlsTimeout = useRef(null);
 
   useEffect(() => {
     loadVideo();
-    
+
     return () => {
       if (hideControlsTimeout.current) {
         clearTimeout(hideControlsTimeout.current);

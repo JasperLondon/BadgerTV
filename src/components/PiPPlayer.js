@@ -1,7 +1,7 @@
-import React, { useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, Animated, PanResponder, StyleSheet } from 'react-native';
-import { usePiP } from '../context/PiPContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useRef } from 'react';
+import { Animated, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { usePiP } from '../context/PiPContext';
 
 // Mini PiP player: draggable, with preview, close, and return buttons
 export default function PiPPlayer({ navigation }) {
