@@ -1,17 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCountdownParts } from '../helpers/countdown'; // [feature] Import countdown util
 import { View, Text, SectionList, StyleSheet, StatusBar, RefreshControl, Image, ScrollView, TouchableOpacity, Alert, Animated } from 'react-native';
+import LiveVideoPlayer from '../components/LiveVideoPlayer';
+import { useNotifications } from './useNotifications';
 
 const localThumb1 = require('../../assets/theweyherline.jpg');
 const localThumb2 = require('../../assets/quixotictarget.jpg');
+const VIDEO_QUALITIES = [
+	{ label: '1080p', uri: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+	{ label: '720p', uri: 'https://www.w3schools.com/html/movie.mp4' },
+	{ label: '480p', uri: 'https://www.w3schools.com/html/mov_bbb.mp4' }, // Demo: same as 1080p
+];
 
 
 export default function LiveTVScreen() {
+	// [feature] Bookmarked streams state (persisted)
+	const [bookmarkedIds, setBookmarkedIds] = useState([]);
+
+	// Load bookmarks from AsyncStorage on mount
+	useEffect(() => {
+		(async () => {
+			try {
+				const stored = await AsyncStorage.getItem('bookmarkedStreams');
+				if (stored) setBookmarkedIds(JSON.parse(stored));
+			} catch {}
+		})();
+	}, []);
+
+	// Save bookmarks to AsyncStorage when changed
+	useEffect(() => {
+		AsyncStorage.setItem('bookmarkedStreams', JSON.stringify(bookmarkedIds));
+	}, [bookmarkedIds]);
+
+	const handleBookmark = (id) => {
+		setBookmarkedIds((prev) =>
+			prev.includes(id) ? prev.filter((bid) => bid !== id) : [...prev, id]
+		);
+	};
+	const { scheduleNotification } = useNotifications();
 	const [streams, setStreams] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState('All');
 	const [sortOption, setSortOption] = useState('soon');
+	// [feature] Quality selector state
+	const [selectedQuality, setSelectedQuality] = useState(VIDEO_QUALITIES[0]);
 
 	const DEMO_STREAMS = [
 		{
@@ -23,6 +57,8 @@ export default function LiveTVScreen() {
 			startTime: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
 			endTime: new Date(Date.now() + 1000 * 60 * 50).toISOString(),
 			thumbnailUrl: localThumb1,
+			trending: true,
+			featured: true,
 		},
 		{
 			id: '2',
@@ -30,9 +66,10 @@ export default function LiveTVScreen() {
 			description: 'Don’t miss the live music event!',
 			isLive: false,
 			category: 'Music',
-			startTime: new Date(Date.now() + 1000 * 60 * 60).toISOString(),
-			endTime: new Date(Date.now() + 1000 * 60 * 120).toISOString(),
+			startTime: new Date(Date.now() + 1000 * 60 * 2).toISOString(), // 2 minutes from now
+			endTime: new Date(Date.now() + 1000 * 60 * 62).toISOString(),
 			thumbnailUrl: localThumb2,
+			new: true,
 		},
 	];
 
@@ -47,6 +84,12 @@ export default function LiveTVScreen() {
 
 	useEffect(() => {
 		loadStreams();
+		// Auto-refresh every 30 seconds
+		const interval = setInterval(() => {
+			setLoading(true);
+			loadStreams();
+		}, 30000);
+		return () => clearInterval(interval);
 	}, []);
 
 	const onRefresh = () => {
@@ -90,6 +133,9 @@ export default function LiveTVScreen() {
 	const liveNow = sortedStreams.filter(s => s.isLive || (s.startTime && new Date(s.startTime) <= now));
 	const upcoming = sortedStreams.filter(s => !s.isLive && s.startTime && new Date(s.startTime) > now);
 
+	// [feature] Mini PiP state for demo
+	const [pipStreamId, setPipStreamId] = useState(null);
+
 
 
 
@@ -126,9 +172,19 @@ export default function LiveTVScreen() {
 				return () => clearInterval(interval);
 			}, [upcoming.length]);
 
-			// [feature] Remind Me handler stub (to be replaced with notification logic)
-			const handleRemindMe = (item) => {
-				Alert.alert('Remind Me', 'A reminder would be set for this event (demo).');
+			// [feature] Remind Me schedules notification
+			const handleRemindMe = async (item) => {
+				try {
+					const startDate = new Date(item.startTime);
+					await scheduleNotification({
+						title: 'Event Reminder',
+						body: `"${item.title}" is starting now!`,
+						date: startDate,
+					});
+					Alert.alert('Reminder Set', `You will be notified when "${item.title}" starts.`);
+				} catch (e) {
+					Alert.alert('Error', 'Could not schedule notification.');
+				}
 			};
 
 		return (
@@ -137,6 +193,10 @@ export default function LiveTVScreen() {
 			<View style={styles.header} accessible accessibilityLabel="Live TV header" accessibilityHint="Screen title and subtitle." >
 				<Text style={styles.headerTitle}>Live TV</Text>
 				<Text style={styles.headerSubtitle}>Watch live and upcoming events</Text>
+				{/* Subtle auto-refresh indicator */}
+				{loading && (
+					<Text style={styles.autoRefreshText} accessibilityLabel="Refreshing streams">Refreshing…</Text>
+				)}
 			</View>
 			{/* Sort selector */}
 					<ScrollView
@@ -205,7 +265,57 @@ export default function LiveTVScreen() {
 							)}
 							renderItem={({ item }) => (
 								<View style={styles.card} accessible accessibilityLabel={`Stream card: ${item.title}`} accessibilityHint={item.isLive ? 'Live event' : 'Upcoming event'}>
-									{item.thumbnailUrl ? (
+									{/* Semantic badges */}
+									<View style={styles.badgeRow}>
+										{item.trending && (
+											<View style={[styles.badge, styles.badgeTrending]} accessible accessibilityLabel="Trending badge">
+												<Text style={styles.badgeText}>Trending</Text>
+											</View>
+										)}
+										{item.new && (
+											<View style={[styles.badge, styles.badgeNew]} accessible accessibilityLabel="New badge">
+												<Text style={styles.badgeText}>New</Text>
+											</View>
+										)}
+										{item.featured && (
+											<View style={[styles.badge, styles.badgeFeatured]} accessible accessibilityLabel="Featured badge">
+												<Text style={styles.badgeText}>Featured</Text>
+											</View>
+										)}
+									</View>
+									{/* Save to Library / Bookmark button */}
+									<TouchableOpacity
+										style={[styles.bookmarkBtn, bookmarkedIds.includes(item.id) && styles.bookmarkBtnActive]}
+										onPress={() => handleBookmark(item.id)}
+										accessibilityRole="button"
+										accessibilityLabel={bookmarkedIds.includes(item.id) ? `Remove ${item.title} from Library` : `Save ${item.title} to Library`}
+										accessibilityHint={bookmarkedIds.includes(item.id) ? `Remove bookmark for ${item.title}` : `Bookmark ${item.title} for later`}
+									>
+										<Text style={[styles.bookmarkBtnText, bookmarkedIds.includes(item.id) && styles.bookmarkBtnTextActive]}>
+											{bookmarkedIds.includes(item.id) ? 'Saved' : 'Save to Library'}
+										</Text>
+									</TouchableOpacity>
+									{/* Quality selector for live events */}
+									{item.isLive && (
+										<View style={styles.qualitySelectorRow}>
+											{VIDEO_QUALITIES.map(q => (
+												<TouchableOpacity
+													key={q.label}
+													style={[styles.qualityBtn, selectedQuality.label === q.label && styles.qualityBtnActive]}
+													onPress={() => setSelectedQuality(q)}
+													accessibilityRole="button"
+													accessibilityLabel={`Select ${q.label} quality`}
+													accessibilityState={{ selected: selectedQuality.label === q.label }}
+												>
+													<Text style={[styles.qualityBtnText, selectedQuality.label === q.label && styles.qualityBtnTextActive]}>{q.label}</Text>
+												</TouchableOpacity>
+											))}
+										</View>
+									)}
+									{/* Show video player for live events, image for others */}
+									{item.isLive ? (
+										<LiveVideoPlayer source={{ uri: selectedQuality.uri }} />
+									) : item.thumbnailUrl ? (
 										<View style={styles.imageWrapper}>
 											<Image
 												source={item.thumbnailUrl}
@@ -218,31 +328,65 @@ export default function LiveTVScreen() {
 									)}
 									<View style={styles.cardHeaderRow}>
 										<Text style={styles.cardTitle} accessibilityLabel={`Event title: ${item.title}`}>{item.title}</Text>
-														{item.isLive && (
-															<View style={styles.liveBadge}>
-																<Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
-																<Text style={styles.liveBadgeText}>LIVE</Text>
-															</View>
-														)}
+										{item.isLive && (
+											<View style={styles.liveBadge}>
+												<Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+												<Text style={styles.liveBadgeText}>LIVE</Text>
+											</View>
+										)}
 									</View>
 									<Text style={styles.cardDesc} accessibilityLabel={`Event description: ${item.description}`}>{item.description}</Text>
-													<Text style={styles.cardMeta} accessibilityLabel={`Event status: ${item.isLive ? 'Now Streaming' : 'Upcoming'}, Category: ${item.category}`}>{item.isLive ? 'Now Streaming' : 'Upcoming'} • {item.category}</Text>
-													{/* [feature] Show countdown and Remind Me for upcoming */}
-													{!item.isLive && (
-														<>
-															{/* Countdown UI */}
-															<Countdown startTime={item.startTime} />
-															<TouchableOpacity
-																style={styles.remindMeBtn}
-																onPress={() => handleRemindMe(item)}
-																accessibilityRole="button"
-																accessibilityLabel={`Remind me about ${item.title}`}
-																accessibilityHint={`Set a reminder for ${item.title}`}
-															>
-																<Text style={styles.remindMeBtnText}>Remind Me</Text>
-															</TouchableOpacity>
-														</>
-													)}
+									<Text style={styles.cardMeta} accessibilityLabel={`Event status: ${item.isLive ? 'Now Streaming' : 'Upcoming'}, Category: ${item.category}`}>{item.isLive ? 'Now Streaming' : 'Upcoming'} • {item.category}</Text>
+									{/* [feature] Live progress bar and Watch from Beginning */}
+									{item.isLive && (
+										<LiveProgressBar startTime={item.startTime} endTime={item.endTime} />
+									)}
+									{item.isLive && (
+										<TouchableOpacity
+											style={styles.watchFromBeginningBtn}
+											onPress={() => Alert.alert('Watch from Beginning', 'This would restart the stream from the beginning (demo).')}
+											accessibilityRole="button"
+											accessibilityLabel={`Watch ${item.title} from beginning`}
+											accessibilityHint={`Restart ${item.title} stream from the beginning`}
+										>
+											<Text style={styles.watchFromBeginningBtnText}>Watch from Beginning</Text>
+										</TouchableOpacity>
+									)}
+									{item.isLive && (
+										<TouchableOpacity
+											style={styles.pipBtn}
+											onPress={async () => {
+												// Expo-av PiP: Only works on Android/iOS native, not web/Expo Go
+												try {
+													// Find video ref in LiveVideoPlayer (would need prop drilling for real PiP)
+													Alert.alert('PiP', 'PiP mode would be triggered here on supported devices.');
+												} catch (e) {
+													Alert.alert('Error', 'PiP not supported in this environment.');
+												}
+											}}
+											accessibilityRole="button"
+											accessibilityLabel={`Mini PiP for ${item.title}`}
+											accessibilityHint={`Minimize ${item.title} video to PiP`}
+										>
+											<Text style={styles.pipBtnText}>Mini PiP</Text>
+										</TouchableOpacity>
+									)}
+									{/* [feature] Show countdown and Remind Me for upcoming */}
+									{!item.isLive && (
+										<>
+											{/* Countdown UI */}
+											<Countdown startTime={item.startTime} />
+											<TouchableOpacity
+												style={styles.remindMeBtn}
+												onPress={() => handleRemindMe(item)}
+												accessibilityRole="button"
+												accessibilityLabel={`Remind me about ${item.title}`}
+												accessibilityHint={`Set a reminder for ${item.title}`}
+											>
+												<Text style={styles.remindMeBtnText}>Remind Me</Text>
+											</TouchableOpacity>
+										</>
+									)}
 								</View>
 							)}
 							contentContainerStyle={styles.listContent}
@@ -256,6 +400,153 @@ export default function LiveTVScreen() {
 }
 
 const styles = StyleSheet.create({
+	autoRefreshText: {
+		color: '#FF6A00',
+		fontSize: 13,
+		marginTop: 4,
+		fontStyle: 'italic',
+		textAlign: 'right',
+	},
+	badgeRow: {
+		flexDirection: 'row',
+		gap: 8,
+		marginBottom: 4,
+		alignItems: 'center',
+	},
+	badge: {
+		borderRadius: 8,
+		paddingHorizontal: 10,
+		paddingVertical: 3,
+		marginRight: 6,
+		alignItems: 'center',
+	},
+	badgeText: {
+		color: '#fff',
+		fontWeight: 'bold',
+		fontSize: 12,
+		letterSpacing: 0.5,
+	},
+	badgeTrending: {
+		backgroundColor: '#FF6A00',
+	},
+	badgeNew: {
+		backgroundColor: '#007AFF',
+	},
+	badgeFeatured: {
+		backgroundColor: '#FFD700',
+	},
+	bookmarkBtn: {
+		alignSelf: 'flex-end',
+		backgroundColor: 'rgba(255,255,255,0.08)',
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 6,
+		marginBottom: 6,
+		borderWidth: 1,
+		borderColor: 'rgba(255,255,255,0.12)',
+	},
+	bookmarkBtnActive: {
+		backgroundColor: '#FF6A00',
+		borderColor: '#FF6A00',
+	},
+	bookmarkBtnText: {
+		color: '#fff',
+		fontWeight: '600',
+		fontSize: 13,
+		letterSpacing: 0.5,
+	},
+	bookmarkBtnTextActive: {
+		color: '#222',
+	},
+	qualitySelectorRow: {
+		flexDirection: 'row',
+		gap: 8,
+		marginBottom: 8,
+		justifyContent: 'flex-end',
+	},
+	qualityBtn: {
+		backgroundColor: 'rgba(255,255,255,0.08)',
+		borderRadius: 12,
+		paddingHorizontal: 12,
+		paddingVertical: 6,
+		marginRight: 4,
+		borderWidth: 1,
+		borderColor: 'rgba(255,255,255,0.12)',
+	},
+	qualityBtnActive: {
+		backgroundColor: '#FF6A00',
+		borderColor: '#FF6A00',
+	},
+	qualityBtnText: {
+		color: '#fff',
+		fontWeight: '600',
+		fontSize: 13,
+		letterSpacing: 0.5,
+	},
+	qualityBtnTextActive: {
+		color: '#222',
+	},
+	pipBtn: {
+		marginTop: 10,
+		backgroundColor: '#FF6A00',
+		borderRadius: 8,
+		paddingVertical: 8,
+		alignItems: 'center',
+	},
+	pipBtnText: {
+		color: '#fff',
+		fontWeight: 'bold',
+		fontSize: 15,
+		letterSpacing: 0.5,
+	},
+	pipDemo: {
+		marginTop: 8,
+		backgroundColor: '#222',
+		borderRadius: 8,
+		padding: 10,
+		alignItems: 'center',
+		borderWidth: 1,
+		borderColor: '#FF6A00',
+	},
+	pipDemoText: {
+		color: '#FF6A00',
+		fontWeight: 'bold',
+		fontSize: 14,
+	},
+	watchFromBeginningBtn: {
+		marginTop: 10,
+		backgroundColor: '#222',
+		borderRadius: 8,
+		paddingVertical: 10,
+		alignItems: 'center',
+		borderWidth: 1,
+		borderColor: '#FF6A00',
+	},
+	watchFromBeginningBtnText: {
+		color: '#FF6A00',
+		fontWeight: 'bold',
+		fontSize: 15,
+		letterSpacing: 0.5,
+	},
+	progressBarWrapper: {
+		marginTop: 10,
+		marginBottom: 4,
+		height: 12,
+		backgroundColor: '#333',
+		borderRadius: 6,
+		overflow: 'hidden',
+	},
+	progressBarFill: {
+		height: '100%',
+		backgroundColor: '#FF6A00',
+		borderRadius: 6,
+	},
+	progressBarText: {
+		color: '#bbb',
+		fontSize: 12,
+		marginTop: 2,
+		textAlign: 'right',
+	},
 	container: { flex: 1, backgroundColor: '#181818' },
 	header: { paddingTop: 56, paddingBottom: 20, paddingHorizontal: 20, backgroundColor: '#181818' },
 	headerTitle: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
@@ -354,12 +645,38 @@ const styles = StyleSheet.create({
 
 // [feature] Countdown component for upcoming events
 function Countdown({ startTime }) {
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		const interval = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(interval);
+	}, []);
 	const { hours, minutes, seconds } = getCountdownParts(startTime);
-	// Format as hh:mm:ss
 	const pad = (n) => n.toString().padStart(2, '0');
 	return (
 		<Text style={styles.cardTime} accessibilityLabel={`Starts in ${hours} hours, ${minutes} minutes, ${seconds} seconds`}>
 			Starts in {pad(hours)}:{pad(minutes)}:{pad(seconds)}
 		</Text>
+	);
+}
+
+// [feature] Live progress bar for live events
+function LiveProgressBar({ startTime, endTime }) {
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		const interval = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(interval);
+	}, []);
+	const start = new Date(startTime).getTime();
+	const end = new Date(endTime).getTime();
+	const duration = end - start;
+	const elapsed = Math.max(0, Math.min(now - start, duration));
+	const percent = duration > 0 ? Math.round((elapsed / duration) * 100) : 0;
+	return (
+		<>
+			<View style={styles.progressBarWrapper}>
+				<View style={[styles.progressBarFill, { width: `${percent}%` }]} />
+			</View>
+			<Text style={styles.progressBarText} accessibilityLabel={`Progress: ${percent}% elapsed`}>{percent}% elapsed</Text>
+		</>
 	);
 }
