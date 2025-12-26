@@ -1,8 +1,8 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import * as API from '../services/api';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { showsData } from '../data/showsData';
 import { streamingData } from '../data/streamingData';
 import { upcomingEventsData } from '../data/upcomingEventsData';
+import * as API from '../services/api';
 
 const VideoContext = createContext({});
 
@@ -26,7 +26,7 @@ export const VideoProvider = ({ children }) => {
       const isConfigured = await API.isAPIConfigured();
       setUseLocalData(!isConfigured);
     } catch (err) {
-      console.log('Using local data - API not configured');
+      // Removed console.log for production
       setUseLocalData(true);
     }
   };
@@ -147,7 +147,8 @@ export const VideoProvider = ({ children }) => {
   // Live TV
   const getLiveStreams = async () => {
     if (useLocalData) {
-      return streamingData.filter(s => s.isLive);
+      // For demo/dev, return all streams (live and upcoming)
+      return streamingData;
     }
 
     try {

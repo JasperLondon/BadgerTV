@@ -1,3 +1,5 @@
+// Removed AWS Amplify imports and initialization; now using Supabase
+import DownloadsScreen from './src/screens/DownloadsScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
@@ -15,6 +17,9 @@ import LibraryScreen from './src/screens/LibraryScreen';
 import LiveTVScreen from './src/screens/LiveTVScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ProfileSetupScreen from './src/screens/ProfileSetupScreen';
+import WatchHistoryScreen from './src/screens/WatchHistoryScreen';
+import FavoritesScreen from './src/screens/FavoritesScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ShowDetails from './src/screens/ShowDetails';
 import ShowDetailScreen from './src/screens/ShowDetailScreen';
@@ -73,6 +78,39 @@ function AppNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Root" component={RootTabs} />
+      <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen 
+        name="Downloads" 
+        component={DownloadsScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="Notifications" 
+        component={require('./src/screens/NotificationsScreen').default}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="HelpSupport" 
+        component={require('./src/screens/HelpSupportScreen').default}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="Favorites" 
+        component={FavoritesScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
       <Stack.Screen 
         name="VideoPlayer" 
         component={VideoPlayer}
@@ -106,11 +144,19 @@ function AppNavigator() {
         }}
       />
       <Stack.Screen 
+        name="WatchHistory" 
+        component={WatchHistoryScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
         name="Login" 
         component={LoginScreen}
-        options={{ 
+        options={{
           presentation: 'modal',
-          animation: 'slide_from_bottom' 
+          animation: 'slide_from_bottom'
         }}
       />
     </Stack.Navigator>

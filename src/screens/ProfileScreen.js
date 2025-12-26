@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Image,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -22,10 +23,12 @@ const ProfileScreen = ({ navigation }) => {
   const [watchHistory, setWatchHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadUserData();
+      fetchProfile();
     } else {
       setLoading(false);
     }
@@ -44,6 +47,18 @@ const ProfileScreen = ({ navigation }) => {
       console.error('Error loading user data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchProfile = async () => {
+    if (!user?.id) return;
+    const { data, error } = await require('../lib/supabase').supabase
+      .from('user_profiles')
+      .select('name')
+      .eq('user_id', user.id)
+      .single();
+    if (data && !error) {
+      setProfile(data);
     }
   };
 
@@ -192,9 +207,15 @@ const ProfileScreen = ({ navigation }) => {
           {/* CTA Buttons */}
           <TouchableOpacity 
             style={styles.signUpButton}
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigation.navigate('Login', { mode: 'signup' })}
           >
             <Text style={styles.signUpButtonText}>CREATE FREE ACCOUNT</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.signUpButton, { backgroundColor: COLORS.SURFACE, borderWidth: 1, borderColor: COLORS.ORANGE, marginBottom: 8 }]}
+            onPress={() => navigation.navigate('Login', { mode: 'signin' })}
+          >
+            <Text style={[styles.signUpButtonText, { color: COLORS.ORANGE }]}>LOG IN</Text>
           </TouchableOpacity>
 
           <Text style={styles.freeNotice}>
@@ -217,17 +238,18 @@ const ProfileScreen = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.profileCard}>
-            <View style={styles.avatarContainer}>
+          <View style={styles.profileCardEnhanced}>
+            <View style={styles.avatarContainerEnhanced}>
               <Image 
                 source={require('../../assets/mwd-logo.png')} 
-                style={styles.logo}
-                resizeMode="contain"
+                style={styles.avatarEnhanced}
+                resizeMode="cover"
               />
             </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.username}>{user?.username || 'User'}</Text>
-              <Text style={styles.email}>{user?.attributes?.email || ''}</Text>
+            <View style={styles.profileInfoEnhanced}>
+              <Text style={styles.usernameEnhanced}>{profile?.name ? `Hi, ${profile.name}!` : 'Hi, User!'}</Text>
+              <Text style={styles.emailEnhanced}>{user?.email || user?.attributes?.email || ''}</Text>
+              <Text style={styles.welcomeEnhanced}>Welcome to Badger TV!</Text>
             </View>
           </View>
         </View>
@@ -254,8 +276,7 @@ const ProfileScreen = ({ navigation }) => {
             <Text style={styles.menuItemText}>Change Password</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Notifications')}>
             <Ionicons name="notifications-outline" size={24} color={COLORS.WHITE} />
             <Text style={styles.menuItemText}>Notifications</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
@@ -283,7 +304,9 @@ const ProfileScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+          
+          
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Downloads')}>
             <Ionicons name="download-outline" size={24} color={COLORS.WHITE} />
             <Text style={styles.menuItemText}>Downloads</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
@@ -293,13 +316,18 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>About</Text>
           
-          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport')}>
             <Ionicons name="help-circle-outline" size={24} color={COLORS.WHITE} />
             <Text style={styles.menuItemText}>Help & Support</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => {
+            const url = 'https://www.mywickeddude.com/privacy-policy';
+            if (typeof Linking !== 'undefined') {
+              Linking.openURL(url);
+            }
+          }}>
             <Ionicons name="document-text-outline" size={24} color={COLORS.WHITE} />
             <Text style={styles.menuItemText}>Terms & Privacy</Text>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
@@ -329,35 +357,58 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.SURFACE,
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: COLORS.SURFACE,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: COLORS.SURFACE,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: COLORS.WHITE,
-    marginBottom: 20,
-  },
-  profileCard: {
+  profileCardEnhanced: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 20,
+    padding: 24,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  profileInfo: {
-    marginLeft: 16,
-    flex: 1,
+  avatarContainerEnhanced: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 2,
+    borderColor: COLORS.ORANGE,
+    marginRight: 20,
   },
+    avatarEnhanced: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+    },
+    profileInfoEnhanced: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+    },
+    usernameEnhanced: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: COLORS.ORANGE,
+      marginBottom: 6,
+      letterSpacing: 0.5,
+    },
+    emailEnhanced: {
+      fontSize: 16,
+      color: 'rgba(255,255,255,0.85)',
+      marginBottom: 4,
+    },
+    welcomeEnhanced: {
+      fontSize: 16,
+      color: COLORS.WHITE,
+      fontWeight: '500',
+    },
   avatarContainer: {
     width: 60,
     height: 60,
@@ -421,7 +472,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -492,7 +543,7 @@ const styles = StyleSheet.create({
   },
   benefitItem: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,

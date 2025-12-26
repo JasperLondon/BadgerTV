@@ -1,25 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect, useRef } from 'react';
-import { Easing } from 'react-native';
-import {
-	View,
-	Text,
-	StyleSheet,
-	TextInput,
-	FlatList,
-	Image,
-	TouchableOpacity,
-	StatusBar,
-	ActivityIndicator,
-	ScrollView,
-	Alert,
-	Animated
-} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useVideos } from '../context/VideoContext';
-import { COLORS } from '../constants/colors';
 import * as Analytics from 'expo-firebase-analytics';
-import { Animated as RNAnimated } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+    Animated, Easing, FlatList,
+    Image, Animated as RNAnimated, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
+} from 'react-native';
+import { COLORS } from '../constants/colors';
+import { searchVideos } from '../services/api';
 
 // Simple shimmer effect for skeleton loader
 const Shimmer = ({ style }) => {
@@ -64,7 +52,7 @@ export default function SearchScreen({ navigation }) {
 		const [typeFilter, setTypeFilter] = useState('All');
 		const [sortOption, setSortOption] = useState('relevance');
 		const [error, setError] = useState(null);
-		const { videos } = useVideos ? useVideos() : { videos: [] };
+		// Removed useVideos; now using Supabase API only
 
 		useEffect(() => {
 			Animated.timing(fadeAnim, {
@@ -79,18 +67,8 @@ export default function SearchScreen({ navigation }) {
 		}, []);
 
 		useEffect(() => {
-			if (query.length > 0) {
-				// Example: Suggest titles from videos
-				const lower = query.toLowerCase();
-				const sugg = videos
-					.map(v => v.title)
-					.filter(title => title && title.toLowerCase().includes(lower) && title.toLowerCase() !== lower)
-					.slice(0, 5);
-				setSuggestions(sugg);
-			} else {
-				setSuggestions([]);
-			}
-		}, [query, videos]);
+			setSuggestions([]);
+		}, [query]);
 
 		async function loadRecentSearches() {
 			try {
@@ -110,15 +88,7 @@ export default function SearchScreen({ navigation }) {
 			await AsyncStorage.removeItem('recentSearches');
 		}
 
-		async function searchVideos(text) {
-			// Simulate search in videos context
-			const lower = text.toLowerCase();
-			return videos.filter(v =>
-				(v.title && v.title.toLowerCase().includes(lower)) ||
-				(v.description && v.description.toLowerCase().includes(lower)) ||
-				(v.category && v.category.toLowerCase().includes(lower))
-			);
-		}
+
 
 		const handleSearch = async (text, fromRecent = false, fromSuggestion = false) => {
 			setLoading(true);

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
   View,
   Text,
@@ -7,25 +9,44 @@ import {
   StyleSheet,
   SafeAreaView,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../constants/colors';
 
 const LoginScreen = () => {
-  const { signIn, signUp, confirmSignUp, forgotPassword, forgotPasswordSubmit, resendConfirmationCode } = useAuth();
-  
-  const [mode, setMode] = useState('signin'); // signin, signup, confirm, forgot, reset
-  const [username, setUsername] = useState('');
+  const navigation = useNavigation();
+  const { signIn, signUp, forgotPassword } = useAuth();
+  const [mode, setMode] = useState('signin'); // signin, signup, forgot
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // Apple Sign In handler
+  const handleAppleSignIn = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      // You can send credential.identityToken to your backend for verification and user creation/login
+      // For now, just show an alert
+      Alert.alert('Apple Sign In Success', JSON.stringify(credential));
+    } catch (e) {
+      if (e.code === 'ERR_CANCELED') {
+        // User cancelled
+      } else {
+        Alert.alert('Apple Sign In Error', e.message);
+      }
+    }
+  };
 
   const validateEmail = (email) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,32 +60,38 @@ const LoginScreen = () => {
 
   const handleSignIn = async () => {
     setErrors({});
-    
-    if (!username) {
-      setErrors({ username: 'Username is required' });
+    if (!email || !validateEmail(email)) {
+      setErrors({ email: 'Valid email is required' });
       return;
     }
     if (!password) {
       setErrors({ password: 'Password is required' });
       return;
     }
-
     setLoading(true);
-    const result = await signIn(username, password);
+    const result = await signIn(email, password);
     setLoading(false);
-
-    if (!result.success) {
-      Alert.alert('Login Failed', result.error);
+    if (result.success) {
+      // Check if user profile exists in Supabase
+      const { data, error } = await require('../lib/supabase').supabase
+        .from('user_profiles')
+        .select('user_id')
+        .eq('user_id', result.user.id)
+        .single();
+      if (!data || error) {
+        // No profile found, go to ProfileSetup
+        navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
+      } else {
+        // Profile exists, go to main app/root
+        navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+      }
+    } else {
+      Alert.alert('Login Failed', result.error || 'Unknown error.');
     }
   };
 
   const handleSignUp = async () => {
     setErrors({});
-    
-    if (!username) {
-      setErrors({ username: 'Username is required' });
-      return;
-    }
     if (!email || !validateEmail(email)) {
       setErrors({ email: 'Valid email is required' });
       return;
@@ -77,14 +104,13 @@ const LoginScreen = () => {
       setErrors({ confirmPassword: 'Passwords do not match' });
       return;
     }
-
     setLoading(true);
-    const result = await signUp(username, email, password);
+    const result = await signUp(email, null, password);
+    // Removed console.log for production
     setLoading(false);
-
     if (result.success) {
-      setMode('confirm');
-      Alert.alert('Success', 'Account created! Please check your email for verification code.');
+      Alert.alert('Success', 'Account created! Please check your email to verify your account. Once confirmed, log in to continue.');
+      setMode('signin');
     } else {
       Alert.alert('Sign Up Failed', result.error);
     }
@@ -113,19 +139,16 @@ const LoginScreen = () => {
 
   const handleForgotPassword = async () => {
     setErrors({});
-    
-    if (!username) {
-      setErrors({ username: 'Username is required' });
+    if (!email || !validateEmail(email)) {
+      setErrors({ email: 'Valid email is required' });
       return;
     }
-
     setLoading(true);
-    const result = await forgotPassword(username);
+    const result = await forgotPassword(email);
     setLoading(false);
-
     if (result.success) {
-      setMode('reset');
-      Alert.alert('Success', 'Verification code sent to your email.');
+      Alert.alert('Success', 'Password reset email sent! Please check your inbox.');
+      setMode('signin');
     } else {
       Alert.alert('Error', result.error);
     }
@@ -193,19 +216,30 @@ const LoginScreen = () => {
           </View>
 
           <View style={styles.form}>
-            {/* Username Field */}
-            {(mode === 'signin' || mode === 'signup' || mode === 'confirm' || mode === 'forgot' || mode === 'reset') && (
+                        {/* Apple Sign In Button (iOS only) */}
+                        {Platform.OS === 'ios' && (mode === 'signin' || mode === 'signup') && (
+                          <AppleAuthentication.AppleAuthenticationButton
+                            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                            cornerRadius={8}
+                            style={{ width: '100%', height: 44, marginBottom: 16 }}
+                            onPress={handleAppleSignIn}
+                          />
+                        )}
+            {/* Email Field */}
+            {(mode === 'signin' || mode === 'signup' || mode === 'forgot') && (
               <View style={styles.inputGroup}>
                 <TextInput
-                  style={[styles.input, errors.username && styles.inputError]}
-                  placeholder="Username"
+                  style={[styles.input, errors.email && styles.inputError]}
+                  placeholder="Email"
                   placeholderTextColor="rgba(255,255,255,0.5)"
-                  value={username}
-                  onChangeText={setUsername}
+                  value={email}
+                  onChangeText={setEmail}
                   autoCapitalize="none"
+                  keyboardType="email-address"
                   autoCorrect={false}
                 />
-                {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
               </View>
             )}
 
@@ -260,22 +294,7 @@ const LoginScreen = () => {
               </View>
             )}
 
-            {/* Verification Code Field */}
-            {(mode === 'confirm' || mode === 'reset') && (
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={[styles.input, errors.code && styles.inputError]}
-                  placeholder="Verification Code"
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {errors.code && <Text style={styles.errorText}>{errors.code}</Text>}
-              </View>
-            )}
+
 
             {/* Action Buttons */}
             <TouchableOpacity
@@ -283,9 +302,7 @@ const LoginScreen = () => {
               onPress={() => {
                 if (mode === 'signin') handleSignIn();
                 else if (mode === 'signup') handleSignUp();
-                else if (mode === 'confirm') handleConfirmSignUp();
                 else if (mode === 'forgot') handleForgotPassword();
-                else if (mode === 'reset') handleResetPassword();
               }}
               disabled={loading}
             >
@@ -314,25 +331,12 @@ const LoginScreen = () => {
                   </TouchableOpacity>
                 </>
               )}
-              
               {mode === 'signup' && (
                 <TouchableOpacity onPress={() => setMode('signin')}>
                   <Text style={styles.link}>Already have an account? Sign In</Text>
                 </TouchableOpacity>
               )}
-              
-              {mode === 'confirm' && (
-                <>
-                  <TouchableOpacity onPress={handleResendCode}>
-                    <Text style={styles.link}>Resend Code</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setMode('signin')}>
-                    <Text style={styles.link}>Back to Sign In</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              
-              {(mode === 'forgot' || mode === 'reset') && (
+              {mode === 'forgot' && (
                 <TouchableOpacity onPress={() => setMode('signin')}>
                   <Text style={styles.link}>Back to Sign In</Text>
                 </TouchableOpacity>

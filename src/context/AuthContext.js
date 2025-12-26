@@ -1,13 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Amplify } from 'aws-amplify';
-import { signUp, signIn, signOut, confirmSignUp, resendSignUpCode, resetPassword, confirmResetPassword, updatePassword, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import awsConfig from '../config/aws-config';
+import { supabase } from '../lib/supabase';
 
-// Configure Amplify with AsyncStorage
-Amplify.configure(awsConfig, {
-  storage: AsyncStorage
-});
 
 const AuthContext = createContext({});
 
@@ -23,147 +16,80 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuthState = async () => {
-    try {
-      setLoading(true);
-      const { username, userId, signInDetails } = await getCurrentUser();
-      setUser({ username, userId, signInDetails });
+    setLoading(true);
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (user) {
+      setUser(user);
       setIsGuest(false);
-    } catch (err) {
-      // User is not logged in - allow guest access
+    } else {
       setUser(null);
       setIsGuest(true);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
-  const signUpUser = async (username, email, password) => {
-    try {
-      setError(null);
-      const { isSignUpComplete, userId, nextStep } = await signUp({
-        username,
-        password,
-        options: {
-          userAttributes: {
-            email,
-          },
-          autoSignIn: true
-        }
-      });
-      return { success: true, isSignUpComplete, userId, nextStep };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+  const signUpUser = async (email, _unused, password) => {
+    // _unused is for compatibility with old username param
+    setError(null);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setError(error.message);
+      return { success: false, error: error.message };
     }
+    setUser(data.user);
+    setIsGuest(false);
+    return { success: true, user: data.user };
   };
 
-  const confirmSignUpUser = async (username, code) => {
-    try {
-      setError(null);
-      const { isSignUpComplete, nextStep } = await confirmSignUp({
-        username,
-        confirmationCode: code
-      });
-      return { success: true, isSignUpComplete, nextStep };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    }
-  };
+  // Supabase handles email confirmation automatically. No need for confirmSignUp or resendConfirmationCode.
+  const confirmSignUpUser = async () => ({ success: true });
+  const resendConfirmationCode = async () => ({ success: true });
 
-  const resendConfirmationCode = async (username) => {
-    try {
-      setError(null);
-      await resendSignUpCode({ username });
-      return { success: true };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+  const signInUser = async (email, password) => {
+    setError(null);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      return { success: false, error: error.message };
     }
-  };
-
-  const signInUser = async (username, password) => {
-    try {
-      setError(null);
-      const { isSignedIn, nextStep } = await signIn({ username, password });
-      if (isSignedIn) {
-        const { username: currentUsername, userId, signInDetails } = await getCurrentUser();
-        setUser({ username: currentUsername, userId, signInDetails });
-        setIsGuest(false);
-      }
-      return { success: true, isSignedIn, nextStep };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    }
+    setUser(data.user);
+    setIsGuest(false);
+    return { success: true, user: data.user };
   };
 
   const signOutUser = async () => {
-    try {
-      setError(null);
-      await signOut();
-      setUser(null);
-      setIsGuest(true);
-      return { success: true };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+    setError(null);
+    const { error } = await supabase.auth.signOut();
+    setUser(null);
+    setIsGuest(true);
+    if (error) {
+      setError(error.message);
+      return { success: false, error: error.message };
     }
+    return { success: true };
   };
 
-  const forgotPassword = async (username) => {
-    try {
-      setError(null);
-      const output = await resetPassword({ username });
-      return { success: true, ...output };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+  // Supabase password reset: send reset email, then user sets new password via link
+  const forgotPassword = async (email) => {
+    setError(null);
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
+      setError(error.message);
+      return { success: false, error: error.message };
     }
+    return { success: true };
   };
-
-  const forgotPasswordSubmit = async (username, code, newPassword) => {
-    try {
-      setError(null);
-      await confirmResetPassword({
-        username,
-        confirmationCode: code,
-        newPassword
-      });
-      return { success: true };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    }
-  };
-
-  const changePassword = async (oldPassword, newPassword) => {
-    try {
-      setError(null);
-      await updatePassword({ oldPassword, newPassword });
-      return { success: true };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    }
-  };
+  // Not needed: forgotPasswordSubmit, changePassword (handled via email link)
+  const forgotPasswordSubmit = async () => ({ success: false, error: 'Not implemented. Use email link.' });
+  const changePassword = async () => ({ success: false, error: 'Not implemented. Use email link.' });
 
   const getCurrentUserData = async () => {
-    try {
-      const user = await getCurrentUser();
-      return user;
-    } catch (err) {
-      return null;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
   };
-
   const getUserToken = async () => {
-    try {
-      const session = await fetchAuthSession();
-      return session.tokens?.idToken?.toString();
-    } catch (err) {
-      return null;
-    }
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
   };
 
   const value = {

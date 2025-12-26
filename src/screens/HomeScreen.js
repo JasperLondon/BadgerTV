@@ -1,9 +1,12 @@
-import { shows } from '../data/sampleShows';
+import { useEffect, useState, useRef } from 'react';
+import { getVideos } from '../services/api';
+import { ActivityIndicator } from 'react-native';
+// Removed sampleShows import; only Supabase videos will be used
 import { StyleSheet, Dimensions, FlatList, Image, Text, TouchableOpacity, ScrollView, View } from 'react-native';
-import { streamingData } from '../data/streamingData';
-import { upcomingEventsData } from '../data/upcomingEventsData';
+import { getLiveStreams } from '../services/api';
+import { getEvents } from '../services/api';
 
-import { useState, useRef } from 'react';
+
 
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
@@ -19,7 +22,41 @@ export default function HomeScreen() {
   const width = Dimensions.get('window').width;
   const [active, setActive] = useState(0);
   const heroListRef = useRef(null);
-  const gridData = shows;
+  const [videos, setVideos] = useState([]);
+  const [liveStreams, setLiveStreams] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    Promise.all([
+      getVideos(),
+      getEvents('upcoming'),
+      getLiveStreams()
+    ])
+      .then(([videosData, eventsData, liveStreamsData]) => {
+        if (isMounted) {
+          setVideos(Array.isArray(videosData) ? videosData : []);
+          setUpcomingEvents(Array.isArray(eventsData) ? eventsData : []);
+          setLiveStreams(Array.isArray(liveStreamsData) ? liveStreamsData : []);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setError('Failed to load videos, events, or live streams');
+          setVideos([]);
+          setUpcomingEvents([]);
+          setLiveStreams([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   // FlatList-based hero carousel
   const renderHero = ({ item }) => (
@@ -40,12 +77,28 @@ export default function HomeScreen() {
     </View>
   );
 
+  // Use only Supabase videos for hero and grid
+  const heroData = videos;
+  const gridData = videos;
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 32 }}>
+      {loading && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginVertical: 40 }}>
+          <ActivityIndicator size="large" color={COLORS.WHITE} />
+          <Text style={{ color: COLORS.WHITE, marginTop: 12 }}>Loading videos...</Text>
+        </View>
+      )}
+      {error && !loading && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginVertical: 40 }}>
+          <Text style={{ color: 'red', marginBottom: 8 }}>{error}</Text>
+          <Text style={{ color: COLORS.WHITE }}>Showing sample data.</Text>
+        </View>
+      )}
       {/* HERO CAROUSEL */}
       <FlatList
         ref={heroListRef}
-        data={shows}
+        data={heroData}
         renderItem={renderHero}
         keyExtractor={(item) => item.id}
         horizontal
@@ -55,20 +108,20 @@ export default function HomeScreen() {
           const index = Math.round(e.nativeEvent.contentOffset.x / width);
           setActive(index);
         }}
-  style={{ maxHeight: 560 }}
+        style={{ maxHeight: 560 }}
       />
       {/* dots */}
       <View style={styles.dots}>
-        {shows.map((_, i) => (
+        {heroData.map((_, i) => (
           <View key={i} style={[styles.dot, i === active && styles.dotActive]} />
         ))}
       </View>
 
       {/* Live TV section */}
-      <StreamingSlider sectionTitle="Streaming 24/7" data={streamingData} onCardPress={(item) => navigation.navigate('VideoPlayer', { video: item })} />
+      <StreamingSlider sectionTitle="Streaming 24/7" data={liveStreams} onCardPress={(item) => navigation.navigate('VideoPlayer', { video: item })} />
 
       {/* Upcoming Events */}
-      <UpcomingEventsSlider sectionTitle="Upcoming Live Events" data={upcomingEventsData} />
+      <UpcomingEventsSlider sectionTitle="Upcoming Live Events" data={upcomingEvents} />
 
       {/* Shows grid */}
       <View style={{ paddingHorizontal: 16 }}>
@@ -84,14 +137,14 @@ export default function HomeScreen() {
                   </View>
                   <Text style={{ color: COLORS.WHITE, fontSize: 14, fontWeight: '600' }}>{item.title}</Text>
                 </TouchableOpacity>
-            </View>
+              </View>
             );
           })}
         </View>
       </View>
 
       {/* Browse by category */}
-      <SectionRow title="Browse by category" data={shows.slice(2)} />
+      <SectionRow title="Browse by category" data={gridData.slice(2)} />
     </ScrollView>
   );
 }

@@ -1,6 +1,13 @@
-import { get, post, del } from 'aws-amplify/api';
-import { getUrl } from 'aws-amplify/storage';
-import { getCurrentUser } from 'aws-amplify/auth';
+// ============================================
+// LIVE STREAMS ENDPOINTS (Supabase)
+// ============================================
+
+export const getLiveStreams = async () => {
+  const { data, error } = await supabase.from('live_streams').select('*').eq('is_active', true);
+  if (error) throw error;
+  return data || [];
+};
+import { supabase } from '../lib/supabase';
 
 /**
  * BadgerTV API Service
@@ -11,53 +18,25 @@ import { getCurrentUser } from 'aws-amplify/auth';
  * - User-specific data (watch history, favorites)
  */
 
-const API_NAME = 'BadgerTVAPI'; // Must match aws-config.js
 
-// Helper function to make GET requests
-const apiGet = async (path) => {
-  const restOperation = get({ apiName: API_NAME, path });
-  const { body } = await restOperation.response;
-  return await body.json();
-};
 
-// Helper function to make POST requests
-const apiPost = async (path, data) => {
-  const restOperation = post({
-    apiName: API_NAME,
-    path,
-    options: { body: data }
-  });
-  const { body } = await restOperation.response;
-  return await body.json();
-};
-
-// Helper function to make DELETE requests
-const apiDelete = async (path) => {
-  const restOperation = del({ apiName: API_NAME, path });
-  await restOperation.response;
-};
 
 // ============================================
-// VIDEO ENDPOINTS
+// VIDEO ENDPOINTS (Supabase)
 // ============================================
 
 export const getVideos = async (category = null) => {
-  try {
-    const path = category ? `/videos?category=${category}` : '/videos';
-    return await apiGet(path);
-  } catch (error) {
-    console.error('Error fetching videos:', error);
-    throw error;
-  }
+  let query = supabase.from('videos').select('*');
+  if (category) query = query.eq('category', category);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 };
 
 export const getVideoById = async (videoId) => {
-  try {
-    return await apiGet(`/videos/${videoId}`);
-  } catch (error) {
-    console.error('Error fetching video:', error);
-    throw error;
-  }
+  const { data, error } = await supabase.from('videos').select('*').eq('id', videoId).single();
+  if (error) throw error;
+  return data;
 };
 
 export const getVideoUrl = async (s3Key, expires = 3600) => {
@@ -76,13 +55,14 @@ export const getVideoUrl = async (s3Key, expires = 3600) => {
   }
 };
 
+
 export const searchVideos = async (query) => {
-  try {
-    return await apiGet(`/videos/search?q=${encodeURIComponent(query)}`);
-  } catch (error) {
-    console.error('Error searching videos:', error);
-    throw error;
-  }
+  const { data, error } = await supabase
+    .from('videos')
+    .select('*')
+    .ilike('title', `%${query}%`);
+  if (error) throw error;
+  return data || [];
 };
 
 // ============================================
@@ -90,22 +70,17 @@ export const searchVideos = async (query) => {
 // ============================================
 
 export const getEvents = async (status = null) => {
-  try {
-    const path = status ? `/events?status=${status}` : '/events';
-    return await apiGet(path);
-  } catch (error) {
-    console.error('Error fetching events:', error);
-    throw error;
-  }
+  let query = supabase.from('events').select('*');
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 };
 
 export const getEventById = async (eventId) => {
-  try {
-    return await apiGet(`/events/${eventId}`);
-  } catch (error) {
-    console.error('Error fetching event:', error);
-    throw error;
-  }
+  const { data, error } = await supabase.from('events').select('*').eq('id', eventId).single();
+  if (error) throw error;
+  return data;
 };
 
 // ============================================
@@ -134,72 +109,71 @@ export const getShowEpisodes = async (showId) => {
 // LIVE TV ENDPOINTS
 // ============================================
 
-export const getLiveStreams = async () => {
-  try {
-    return await apiGet('/live');
-  } catch (error) {
-    console.error('Error fetching live streams:', error);
-    throw error;
-  }
-};
+// Removed old getLiveStreams; now using Supabase version below
 
 // ============================================
-// USER DATA ENDPOINTS
+
+// USER DATA ENDPOINTS (Supabase)
 // ============================================
+import { useAuth } from '../context/AuthContext';
 
 export const getWatchHistory = async () => {
-  try {
-    const user = await getCurrentUser();
-    return await apiGet(`/users/${user.username}/history`);
-  } catch (error) {
-    console.error('Error fetching watch history:', error);
-    throw error;
-  }
+  const { user } = useAuth();
+  if (!user?.id) throw new Error('No Supabase user ID');
+  const { data, error } = await supabase
+    .from('history')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('watched_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
 };
 
 export const updateWatchProgress = async (videoId, progress, duration) => {
-  try {
-    const user = await getCurrentUser();
-    await apiPost(`/users/${user.username}/history`, {
-      videoId,
+  const { user } = useAuth();
+  if (!user?.id) throw new Error('No Supabase user ID');
+  const { error } = await supabase
+    .from('history')
+    .upsert({
+      user_id: user.id,
+      video_id: videoId,
       progress,
       duration,
-      lastWatchedAt: new Date().toISOString(),
+      watched_at: new Date().toISOString(),
     });
-  } catch (error) {
-    console.error('Error updating watch progress:', error);
-    throw error;
-  }
+  if (error) throw error;
 };
 
 export const getFavorites = async () => {
-  try {
-    const user = await getCurrentUser();
-    return await apiGet(`/users/${user.username}/favorites`);
-  } catch (error) {
-    console.error('Error fetching favorites:', error);
-    throw error;
-  }
+  const { user } = useAuth();
+  if (!user?.id) throw new Error('No Supabase user ID');
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('video_id, videos(*)')
+    .eq('user_id', user.id);
+  if (error) throw error;
+  // Flatten to video objects
+  return (data || []).map(fav => fav.videos);
 };
 
 export const addFavorite = async (videoId) => {
-  try {
-    const user = await getCurrentUser();
-    await apiPost(`/users/${user.username}/favorites`, { videoId });
-  } catch (error) {
-    console.error('Error adding favorite:', error);
-    throw error;
-  }
+  const { user } = useAuth();
+  if (!user?.id) throw new Error('No Supabase user ID');
+  const { error } = await supabase
+    .from('favorites')
+    .insert({ user_id: user.id, video_id: videoId });
+  if (error) throw error;
 };
 
 export const removeFavorite = async (videoId) => {
-  try {
-    const user = await getCurrentUser();
-    await apiDelete(`/users/${user.username}/favorites/${videoId}`);
-  } catch (error) {
-    console.error('Error removing favorite:', error);
-    throw error;
-  }
+  const { user } = useAuth();
+  if (!user?.id) throw new Error('No Supabase user ID');
+  const { error } = await supabase
+    .from('favorites')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('video_id', videoId);
+  if (error) throw error;
 };
 
 // ============================================

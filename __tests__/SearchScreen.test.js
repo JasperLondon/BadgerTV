@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import SearchScreen from '../src/screens/SearchScreen';
 
 // Mock navigation and context

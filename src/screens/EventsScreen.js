@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, StatusBar, Dimensions } from 'react-native';
-import { useVideos } from '../context/VideoContext';
+import { getEvents } from '../services/api';
 import { COLORS } from '../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -8,7 +8,6 @@ import { useNavigation } from '@react-navigation/native';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 export default function EventsScreen() {
   const navigation = useNavigation();
-  const { getEvents } = useVideos();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,8 +17,12 @@ export default function EventsScreen() {
 
   const loadEvents = async () => {
     setLoading(true);
-    const data = await getEvents();
-    setEvents(data);
+    try {
+      const data = await getEvents();
+      setEvents(data);
+    } catch (err) {
+      setEvents([]);
+    }
     setLoading(false);
   };
 

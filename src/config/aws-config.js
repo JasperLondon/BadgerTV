@@ -10,28 +10,24 @@
 
 const awsConfig = {
   Auth: {
-    Cognito: {
-      // REQUIRED - Amazon Cognito Region
-      region: 'us-east-1',
-      
-      // OPTIONAL - Amazon Cognito User Pool ID
-      userPoolId: 'us-east-1_7NPajOhY9',
-      
-      // OPTIONAL - Amazon Cognito Web Client ID (App Client ID)
-      userPoolClientId: '494fqhm34n4ach8lcr203at11l',
-    }
+    // REQUIRED - Amazon Cognito Region
+    region: 'us-east-1',
+    // OPTIONAL - Amazon Cognito User Pool ID
+    userPoolId: 'us-east-1_YgjKrj0BI',
+    // OPTIONAL - Amazon Cognito Web Client ID (App Client ID)
+    userPoolClientId: '7u348fnoq6kujpmf0assoe9spq',
   },
-  
+
   API: {
     endpoints: [
       {
         name: 'BadgerTVAPI',
-        endpoint: '', // TODO: Add API Gateway endpoint when Lambda functions are deployed
+        endpoint: 'https://enbblgoxg9.execute-api.us-east-1.amazonaws.com/prod',
         region: 'us-east-1'
       }
     ]
   },
-  
+
   Storage: {
     AWSS3: {
       bucket: 'badgertv-videos',
